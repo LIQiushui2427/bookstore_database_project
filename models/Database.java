@@ -2,7 +2,7 @@ package models;
 
 import java.sql.*;
 import java.io.*;
-import java.util.ArrayList;
+import java.util.*;
 
 import models.file.*;
 
@@ -11,10 +11,10 @@ public class Database {
     final String dbUsername = "csci3170";
     final String dbPassword = "testfor3170";
 
-    //final String[] tableNames = {"customer", "book", "item", "author", "order_details", "buy","order"};
     final String[] tableNames = {"customer", "book", "author", "order_details", "buy","order"};
 
     private Connection conn = null;
+    private Random random = new Random();
 
     public void connect() throws ClassNotFoundException, SQLException {
         Class.forName("com.mysql.cj.jdbc.Driver");
@@ -52,7 +52,6 @@ public class Database {
         PreparedStatement[] stmts={
             conn.prepareStatement("CREATE TABLE customer (uid VARCHAR(45) NOT NULL, name VARCHAR(45) NOT NULL, address VARCHAR(100) NOT NULL, PRIMARY KEY (uid))"),
             conn.prepareStatement("CREATE TABLE book (isbn VARCHAR(45) NOT NULL, title VARCHAR(45) NOT NULL, price double NOT NULL, inventory_quantity int NOT NULL, PRIMARY KEY (isbn))"),
-            //conn.prepareStatement("CREATE TABLE item (isbn VARCHAR(45) NOT NULL, item_quantity int NOT NULL, PRIMARY KEY (isbn, item_quantity))"),
             conn.prepareStatement("CREATE TABLE author (isbn VARCHAR(45) NOT NULL, author_name VARCHAR(45) NOT NULL, PRIMARY KEY (isbn, author_name))"),
             conn.prepareStatement("CREATE TABLE order_details (oid VARCHAR(45) NOT NULL, order_time TIMESTAMP NOT NULL, order_quantity int NOT NULL, shipping_status VARCHAR(45) NOT NULL, PRIMARY KEY (oid))"),
             conn.prepareStatement("CREATE TABLE buy (uid VARCHAR(45) NOT NULL, isbn VARCHAR(45) NOT NULL, item_quantity int NOT NULL, PRIMARY KEY (uid, isbn, item_quantity))"),
@@ -71,7 +70,6 @@ public class Database {
 
             conn.prepareStatement("DROP TABLE customer"),
             conn.prepareStatement("DROP TABLE book"),
-            //conn.prepareStatement("DROP TABLE item"),
             conn.prepareStatement("DROP TABLE author"),
             conn.prepareStatement("DROP TABLE order_details"),
             conn.prepareStatement("DROP TABLE buy"),
@@ -85,6 +83,7 @@ public class Database {
 
     //load data
     public void loadDataFromFiles(String folderPath) throws SQLException, IOException{
+        System.out.println("Loading data from files...");
         InputDB(buy.class, folderPath + "/buy.csv");
         InputDB(book.class, folderPath + "/book.csv");
         InputDB(order.class, folderPath + "/order.csv");
@@ -106,110 +105,174 @@ public class Database {
             System.out.println("[Error]"+e.getMessage());
         }
     }
-
+    public void listUsers() throws SQLException{
+        System.out.println("Listing all users... If you are not in the list, you cannot make any order.");
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM customer");
+        ResultSet rs = stmt.executeQuery();
+        while(rs.next()){
+            System.out.println(rs.getString("uid") + " " + rs.getString("name") + " " + rs.getString("address"));
+        }
+    }
     // ======Customer Operations ======//
-    public boolean testISBN(String ISBN){
-        try{
-            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM book WHERE isbn = ?");
-            stmt.setString(1, ISBN);
-            ResultSet rs = stmt.executeQuery();
-            if(rs.next()){
-                return true;
+    public void listAllBooks() throws SQLException{
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM book");
+        ResultSet rs = stmt.executeQuery();
+        while(rs.next()){
+            System.out.println(rs.getString("isbn") + " " + rs.getString("title") + " " + rs.getString("price") + " " + rs.getString("inventory_quantity"));
+        }
+    }
+    public void placeOrder(String userID, Scanner sc){
+
+        int orderId_num = random.nextInt(100000000);
+        String orderID = String.format("%08d", orderId_num);
+        ArrayList<String> ISBNList=new ArrayList<String>();
+        ArrayList<Integer> item_quantity=new ArrayList<Integer>();
+
+        System.out.println("Order placed successfully, your order ID is: " + orderID);
+
+        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+
+        while(true){
+            System.out.printf("Enter The Book ISBN You Like Order. Tpye '0' to finish: ");
+            String isbn = sc.next();
+            if(isbn.equals("0")){
+                break;
+            }
+            System.out.printf("Enter The Quantity You Like Order. Tpye '0' to finish: ");
+            int quantity = sc.nextInt();
+            if(quantity==0){
+                break;
+            }
+            if(placeOrderUtil(userID, orderID, isbn, quantity, timestamp)==1){
+                break;
+            }
+            ISBNList.add(isbn);
+            item_quantity.add(quantity);
+        }
+        
+        System.out.println("-----------------------");
+    }
+
+    public int placeOrderUtil(String userID, String orderID, String isbn, int quantity, Timestamp timestamp){
+        try (PreparedStatement stmt1 = conn.prepareStatement("SELECT inventory_quantity FROM book WHERE isbn = ?");
+             PreparedStatement _stmt2 =  conn.prepareStatement("SELECT COUNT(*) FROM `order` WHERE isbn = CAST(? AS CHAR(20)) AND oid = CAST(? AS CHAR(20))");
+             PreparedStatement stmt2 = conn.prepareStatement("INSERT INTO `order` VALUES (?, ?, ?, ?)");
+             PreparedStatement stmt2_ = conn.prepareStatement("UPDATE `order` SET item_quantity = item_quantity + ? WHERE oid = ? AND isbn = ?");
+             PreparedStatement stmt3 = conn.prepareStatement("SELECT * FROM order_details WHERE oid = ?");
+             PreparedStatement stmt4 = conn.prepareStatement("UPDATE order_details SET order_quantity = order_quantity + ? WHERE oid = ?");
+             PreparedStatement stmt5 = conn.prepareStatement("INSERT INTO order_details VALUES (?, ?, ?, ?)");
+             PreparedStatement stmt6 = conn.prepareStatement("UPDATE book SET inventory_quantity = inventory_quantity - ? WHERE isbn = ?");
+             PreparedStatement stmt7 = conn.prepareStatement("INSERT INTO buy (uid, isbn, item_quantity) VALUES (?, ?, ?)");
+             ) {
+            
+            stmt1.setString(1, isbn);
+            ResultSet rs1 = stmt1.executeQuery();
+            if(rs1.next()){
+                if(rs1.getInt("inventory_quantity")<quantity){
+                    System.out.println("We have not enough book! Order Failed!");
+                    return 1;
+                }
             }
             else{
-                return false;
+                System.out.println("The ISBN You Entered Is Not Exist! Order Failed!");
+                return 1;
             }
-        }
-        catch (SQLException e) {
-            System.out.println(" [Error] No such table or tables are not initialized yet.");
-            return false;
-        }
-    }
-
-    public boolean testQuantity(String ISBN, int quantity){
-        try{
-            PreparedStatement stmt = conn.prepareStatement("SELECT inventory_quantity FROM book WHERE isbn = ?");
-            stmt.setString(1, ISBN);
-            ResultSet rs = stmt.executeQuery();
-            if(rs.next()){
-                if(rs.getInt("inventory_quantity")>=quantity){
-                    return true;
-                }
-                else{
-                    return false;
-                }
+            rs1.close();
+            
+            System.out.println("Order item Placed Successfull. Updating order table...");
+            //check if order is in order table
+            _stmt2.setString(1, isbn);
+            _stmt2.setString(2, orderID);
+            ResultSet rs = _stmt2.executeQuery();
+            rs.next();
+            if(rs.getInt(1)==0){
+                System.out.println("Order is not in order table, inserting it...");
+                stmt2.setString(1, orderID);
+                stmt2.setString(2, isbn);
+                stmt2.setInt(3, quantity);
+                stmt2.setTimestamp(4, timestamp);
+                stmt2.executeUpdate();
+                System.out.println("Order table inserted successfully.");
             }
             else{
-                return false;
-            }
-        }
-        catch (SQLException e) {
-            System.out.println(" [Error] No such table or tables are not initialized yet.");
-            return false;
-        }
-    }
-
-    public void printQuantity(String isbn){
-        try{
-            PreparedStatement stmt = conn.prepareStatement("SELECT inventory_quantity FROM book WHERE isbn = ?");
-            stmt.setString(1, isbn);
-            ResultSet rs = stmt.executeQuery();
-            if(rs.next()){
-                System.out.println("What we can provide most is "+rs.getInt("inventory_quantity"+" books"));
-            }
-        }
-        catch (SQLException e) {
-            System.out.println(" [Error] No such table or tables are not initialized yet.");
-        }
-    }
-
-    public void placeOrder(String userID, String orderID, ArrayList<String> ISBNList,ArrayList<Integer>item_quantity){
-        try{
-            //insert into order_details
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO order_details (oid, order_quantity, shipping_status, order_date) VALUES (?, ?, ?, ?)");
-            stmt.setString(1, orderID);
-            int sum=0;
-            for(int i=0;i<item_quantity.size();i++){
-                sum+=item_quantity.get(i);
-            }
-            stmt.setInt(2, sum);
-            stmt.setString(3, "Ordered");
-            stmt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
-            stmt.execute();
-
-            //modify book inventory_quantity
-            for(int i=0;i<ISBNList.size();i++){
-                stmt=conn.prepareStatement("UPDATE book SET inventory_quantity = inventory_quantity - ? WHERE isbn = ?");
-                stmt.setInt(1, item_quantity.get(i));
-                stmt.setString(1,ISBNList.get(i));
-                stmt.execute();
+                System.out.println("Order is in order table, updating it...");
+                stmt2_.setInt(1, quantity);
+                stmt2_.setString(2, orderID);
+                stmt2_.setString(3, isbn);
+                stmt2_.executeUpdate();
+                System.out.println("Order table updated successfully.");
             }
 
-            //add buy record
-            for(int i=0;i<ISBNList.size();i++){
-                stmt=conn.prepareStatement("INSERT INTO buy (uid, isbn, item_quantity) VALUES (?, ?, ?)");
-                stmt.setString(1, userID);
-                stmt.setString(2, ISBNList.get(i));
-                stmt.setInt(3, item_quantity.get(i));
-                stmt.execute();
+            rs.close();
+            
+    
+            System.out.println("Updating order_details table...");
+            stmt3.setString(1, orderID);
+            ResultSet rs2 = stmt3.executeQuery();
+            if(rs2.next()){
+                System.out.println("Order is in order_details table, updating it...");
+                stmt4.setInt(1, quantity);
+                stmt4.setString(2, orderID);
+                stmt4.executeUpdate();
+                System.out.println("Order_details table updated successfully.");
             }
+            else{
+                System.out.println("Order is not in order_details table, inserting it...");
+                stmt5.setString(1, orderID);
+                stmt5.setTimestamp(2, timestamp);
+                stmt5.setInt(3, quantity);
+                stmt5.setString(4, "Ordered");
 
-            //add order record
-            for(int i=0;i<ISBNList.size();i++){
-                stmt=conn.prepareStatement("INSERT INTO `order` ( oid, uid,item_quantity, isbn) VALUES (?, ?, ?, ?)");
-                stmt.setString(1, orderID);
-                stmt.setString(2, userID);
-                stmt.setInt(3, item_quantity.get(i));
-                stmt.setString(4, ISBNList.get(i));
-                stmt.execute();
+                stmt5.executeUpdate();
+                System.out.println("Order_details table inserted successfully.");
             }
-
-            System.out.println("Order placed successfully.");
+            rs2.close();
+    
+            System.out.println("Updating book table...");
+            stmt6.setInt(1, quantity);
+            stmt6.setString(2, isbn);
+            stmt6.executeUpdate();
+            System.out.println("Book table updated successfully.");
+            
+            //insert or update buy table
+            System.out.println("Updating buy table...");
+            //check if order is in buy table
+            PreparedStatement stmt8 = conn.prepareStatement("SELECT * FROM buy WHERE uid = ?");
+            stmt8.setString(1, userID);
+            ResultSet rs3 = stmt8.executeQuery();
+            //search for isbn inside buy
+            
+            if(!rs3.next()){//if isbn is not in buy, insert it
+                System.out.println("Order is not in buy table, inserting it...");
+                stmt7.setString(1, userID);
+                stmt7.setString(2, isbn);
+                stmt7.setInt(3, quantity);
+                stmt7.executeUpdate();
+            }
+            //if isbn is in buy, update it
+            while(rs3.next()){
+                if(rs3.getString("isbn").equals(isbn)){
+                    System.out.println("Order is in buy table, updating it...");
+                    PreparedStatement stmt9 = conn.prepareStatement("UPDATE buy SET item_quantity = item_quantity + ? WHERE uid = ? AND isbn = ?");
+                    stmt9.setInt(1, quantity);
+                    stmt9.setString(2, userID);
+                    stmt9.setString(3, isbn);
+                    stmt9.executeUpdate();
+                    System.out.println("Buy table updated successfully.");
+                    return 0;
+                }
+            }
+            
+            System.out.println("Updating buy table successful.");
+            return 0;
         }
         catch (Exception e) {
             System.out.println("[Error]"+e.getMessage());
+            return 1;
         }
     }
+    
 
     public void printHistoryOrders(String userID){
         try {
@@ -227,13 +290,13 @@ public class Database {
             }
 
             //print order record
-            System.out.println("|oid|Order Quantity|Order Date|Order Status|");
-            stmt = conn.prepareStatement("SELECT oid FROM order_details WHERE oid in (SELECT DISTINCT oid FROM order WHERE uid =?)");
+            System.out.println("|oid|Title|Order Quantity|Order Date|Order Status|");
+            stmt = conn.prepareStatement("SELECT oid FROM order_details WHERE oid in (SELECT DISTINCT oid FROM `order` WHERE uid =?)");
             stmt.setString(1, userID);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                 String oid = rs.getString(1);
-                stmt = conn.prepareStatement("SELECT order_date, shipping_status  FROM order_details WHERE oid = ?");
+                stmt = conn.prepareStatement("SELECT order_time, shipping_status  FROM order_details WHERE oid = ?");
                 stmt.setString(1, oid);
                 ResultSet rs2 = stmt.executeQuery();
                 rs2.next();
@@ -262,8 +325,7 @@ public class Database {
     public void printBookListByISBN(String isbn){
         try {
             //no record
-            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM book WHERE isbn = ?");
-            stmt.setString(1, isbn);
+            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM book WHERE isbn Like '%" + isbn + "%'");
             ResultSet num = stmt.executeQuery();
             num.next();
             int count = num.getInt(1);
@@ -276,12 +338,56 @@ public class Database {
 
             //print book record
             System.out.println("|ISBN|Title|Author|Price|Inventory Quantity|");
-            stmt = conn.prepareStatement("SELECT title, price, inventory_quantity FROM book WHERE isbn = ?");
-            stmt.setString(1, isbn);
+            stmt = conn.prepareStatement("SELECT isbn, title, price, inventory_quantity FROM book WHERE isbn Like '%" + isbn + "%'");
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String ISBN = rs.getString(1);
+                String title = rs.getString(2);
+                double price = rs.getDouble(3);
+                int inventory_quantity = rs.getInt(4);
+                stmt = conn.prepareStatement("SELECT author_name FROM author WHERE isbn = ?");
+                stmt.setString(1, ISBN);
+                ResultSet rs2 = stmt.executeQuery();
+                ArrayList<String> author =new ArrayList<String>();
+                while(rs2.next()){
+                    author.add(rs2.getString(1));
+                }
+                System.out.printf("|"+ISBN+"|"+title+"|");
+                for(int i=0;i<author.size();i++){
+                    System.out.printf(author.get(i));
+                    if(i!=author.size()-1) System.out.printf(",");
+                }
+                System.out.println("|"+price+"|"+inventory_quantity+"|");
+            }
+        }
+        catch (Exception e) {
+            System.out.println("[Error]"+e.getMessage());
+        }
+    }
+    public void printBookByISBN(String ISBN){
+        try {
+            //no record
+            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM book WHERE isbn = ?");
+            stmt.setString(1, ISBN);
+            ResultSet num = stmt.executeQuery();
+            num.next();
+            int count = num.getInt(1);
+            if(count==0) {
+                System.out.println("|                             |");
+                System.out.println("     No book record found.");
+                System.out.println("|                             |");
+                return;
+            }
+
+            //print book record
+            System.out.println("|ISBN|Title|Author|Price|Inventory Quantity|");
+            stmt = conn.prepareStatement("SELECT isbn, title, price, inventory_quantity FROM book WHERE isbn = ?");
+            stmt.setString(1, ISBN);
             ResultSet rs = stmt.executeQuery();
             rs.next();
-            String title = rs.getString(1);
-            double price = rs.getDouble(2);
+            String isbn = rs.getString(1);
+            String title = rs.getString(2);
+            double price = rs.getDouble(3);
             int inventory_quantity = rs.getInt(4);
             stmt = conn.prepareStatement("SELECT author_name FROM author WHERE isbn = ?");
             stmt.setString(1, isbn);
@@ -301,12 +407,10 @@ public class Database {
             System.out.println("[Error]"+e.getMessage());
         }
     }
-
-    public void printBookListByTitle(String title){
+    public void searchBookListByTitle(String title){
         try {
             //no record
-            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM book WHERE title = ?");
-            stmt.setString(1, title);
+            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM book WHERE title Like '%" + title + "%'");
             ResultSet num = stmt.executeQuery();
             num.next();
             int count = num.getInt(1);
@@ -319,26 +423,11 @@ public class Database {
 
             //print book record
             System.out.println("|ISBN|Title|Author|Price|Inventory Quantity|");
-            stmt = conn.prepareStatement("SELECT isbn, price, inventory_quantity FROM book WHERE title = ?");
-            stmt.setString(1, title);
+            stmt = conn.prepareStatement("SELECT isbn FROM book WHERE title Like '%" + title + "%'");
             ResultSet rs = stmt.executeQuery();
             while(rs.next()){
                 String isbn = rs.getString(1);
-                double price = rs.getDouble(2);
-                int inventory_quantity = rs.getInt(4);
-                stmt = conn.prepareStatement("SELECT author_name FROM author WHERE isbn = ?");
-                stmt.setString(1, isbn);
-                ResultSet rs2 = stmt.executeQuery();
-                ArrayList<String> author =new ArrayList<String>();
-                while(rs2.next()){
-                    author.add(rs2.getString(1));
-                }
-                System.out.printf("|"+isbn+"|"+title+"|");
-                for(int i=0;i<author.size();i++){
-                    System.out.printf(author.get(i));
-                    if(i!=author.size()-1) System.out.printf(",");
-                }
-                System.out.println("|"+price+"|"+inventory_quantity+"|");
+                printBookByISBN(isbn);
             }
         }
         catch (Exception e) {
@@ -349,8 +438,7 @@ public class Database {
     public void printBookListByAuthor(String author){
         try {
             //no record
-            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM author WHERE author_name = ?");
-            stmt.setString(1, author);
+            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(isbn) FROM author WHERE author_name LIKE '%" + author + "%'");
             ResultSet num = stmt.executeQuery();
             num.next();
             int count = num.getInt(1);
@@ -363,19 +451,11 @@ public class Database {
 
             //print book record
             System.out.println("|ISBN|Title|Author|Price|Inventory Quantity|");
-            stmt = conn.prepareStatement("SELECT isbn FROM author WHERE author_name = ?");
-            stmt.setString(1, author);
+            stmt = conn.prepareStatement("SELECT DISTINCT(isbn) FROM author WHERE author_name LIKE '%" + author + "%'");
             ResultSet rs = stmt.executeQuery();
             while(rs.next()){
                 String isbn = rs.getString(1);
-                stmt = conn.prepareStatement("SELECT title, price, inventory_quantity FROM book WHERE isbn = ?");
-                stmt.setString(1, isbn);
-                ResultSet rs2 = stmt.executeQuery();
-                rs2.next();
-                String title = rs2.getString(1);
-                double price = rs2.getDouble(2);
-                int inventory_quantity = rs2.getInt(4);
-                System.out.println("|"+isbn+"|"+title+"|"+author+"|"+price+"|"+inventory_quantity+"|");
+                printBookByISBN(isbn);
             }
         }
         catch (Exception e) {
@@ -438,9 +518,9 @@ public class Database {
             num.next();
             int count = num.getInt(1);
             if(count==0) {
-                System.out.println("|                             |");
-                System.out.println("     No order record found.");
-                System.out.println("|                             |");
+                System.out.println("|                                            |");
+                System.out.println("| No order record found or invalid user ID.  |");
+                System.out.println("|                                            |");
                 return;
             }
 
@@ -455,7 +535,7 @@ public class Database {
                 int orderQuantity;
                 Timestamp orderTime;
 
-                //order quantity, ordeer date
+                //order quantity, order date
                 stmt = conn.prepareStatement("SELECT order_quantity, order_time FROM order_details WHERE oid = ?  AND shipping_status = 'Shipped' ORDER BY order_time DESC");
                 stmt.setString(1, oid);
                 ResultSet rs2 = stmt.executeQuery();
@@ -574,6 +654,23 @@ public class Database {
         }
     }
 
+    public boolean verifyUser(String uid){
+        try{
+            PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(uid) FROM buy WHERE uid=?");
+            stmt.setString(1,uid);
+            ResultSet num = stmt.executeQuery();
+            num.next();
+            int count = num.getInt(1);
+            if(count==0) {
+                System.out.println("Fail. NO such user. Please try again");
+                return false;
+             }
+            return true;
+        } catch (SQLException e) {
+            System.out.println("[Error] Failed to verify user.\n");
+            return false;
+        }
+    }
     public void optOrderUpdate(String oid){
         try{
             PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(oid) FROM `order` WHERE oid=?");
@@ -620,5 +717,4 @@ public class Database {
             System.out.println("[Error] Failed to load order.\n");
         }
     }
-
 }
