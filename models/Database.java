@@ -124,8 +124,9 @@ public class Database {
     }
     public void placeOrder(String userID, Scanner sc){
 
-        int orderId_num = random.nextInt(100000000);
-        String orderID = String.format("%08d", orderId_num);
+        String s = UUID.randomUUID().toString(); 
+        String orderID=s.substring(0,8)+s.substring(9,13)+s.substring(14,18)+s.substring(19,23)+s.substring(24);
+
 
         System.out.println("Order placed successfully, your order ID is: " + orderID);
 
@@ -673,6 +674,18 @@ public class Database {
         } catch (SQLException e) {
             System.out.println("[Error] Failed to verify user.\n");
             return false;
+        }
+    }
+    public void createUser(String userID,String userName,String userAddress){
+        try{
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO customer VALUES (?,?,?)");
+            stmt.setString(1, userID);
+            stmt.setString(2, userName);
+            stmt.setString(3, userAddress);
+            stmt.executeUpdate();
+            System.out.println("User " + userID + " created.");
+        }catch (SQLException e) {
+            System.out.println(" [Error] " + e.getMessage());
         }
     }
     public void optOrderUpdate(String oid){
