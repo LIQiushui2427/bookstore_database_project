@@ -15,8 +15,13 @@ public class BookstoreCLI implements CLIInterface {
     public void startCLI() {
         while (true) {
             printMenu();
-            int choice = sc.nextInt();
+            String choice_ = sc.next();
+            if(!models.utils.verifyInput.isPositiveInteger(choice_)){
+                System.out.println("[Error] Invalid operation, choose again.\n");
+                continue;
+            }
             System.out.println();
+            int choice = Integer.parseInt(choice_);
             switch (choice) {
                 case 1: optOrderUpdate(); break;
                 case 2: optOrderQuery(); break;
@@ -39,8 +44,13 @@ public class BookstoreCLI implements CLIInterface {
     private void optOrderQuery() {
         while(true){
         printSubMenu1();
-        int choice = sc.nextInt();
-        System.out.println();
+        String choice_ = sc.next();
+            if(!models.utils.verifyInput.isPositiveInteger(choice_)){
+                System.out.println("[Error] Invalid operation, choose again.\n");
+                continue;
+            }
+            System.out.println();
+            int choice = Integer.parseInt(choice_);
             switch (choice) {
                 case 1: optOrderedOrder(); break;
                 case 2: optShippedOrder(); break;

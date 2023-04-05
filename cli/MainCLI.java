@@ -4,6 +4,7 @@ import java.util.Scanner;
 import models.*;
 import java.time.format.DateTimeFormatter;  
 import java.time.LocalDateTime; 
+import models.utils.*;
 
 public class MainCLI implements CLIInterface{
     private Database db;
@@ -25,8 +26,13 @@ public class MainCLI implements CLIInterface{
         // }
         while (true) {
             printMainMenu();
-            int choice = sc.nextInt();
+            String choice_ = sc.next();
+            if(!verifyInput.isPositiveInteger(choice_)){
+                System.out.println("[Error] Invalid operation, choose again.\n");
+                continue;
+            }
             System.out.println();
+            int choice = Integer.parseInt(choice_);
             CLIInterface c = null;
             switch (choice) {
                 case 1:  c = new DatabaseCLI(db, sc); break;
@@ -46,6 +52,7 @@ public class MainCLI implements CLIInterface{
         System.out.println("+System Date: "+dtf.format(now));  
         System.out.printf("+Database Records: ");System.out.println();
         try{db.listUsers();}catch(Exception e){System.out.println("[Error]"+e.getMessage());}
+        try{db.listAllBooks();}catch(Exception e){System.out.println("[Error]"+e.getMessage());}
         db.countAndPrintAllRecordsInTables();
         System.out.println("If there are no records, please initialize the database first.");
         System.out.println("——————————————————————————");

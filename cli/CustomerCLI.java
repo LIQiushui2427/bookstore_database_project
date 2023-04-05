@@ -2,6 +2,7 @@ package cli;
 
 import java.util.*;
 import models.*;
+import models.utils.*;
 
 public class CustomerCLI implements CLIInterface {
     private Database db;
@@ -15,8 +16,14 @@ public class CustomerCLI implements CLIInterface {
     public void startCLI() {
         while (true) {
             printMenu();
-            int choice = sc.nextInt();
+            //check if the input is a positive integer
+            String choice_ = sc.next();
+            if(!verifyInput.isPositiveInteger(choice_)){
+                System.out.println("[Error] Invalid operation, choose again.\n");
+                continue;
+            }
             System.out.println();
+            int choice = Integer.parseInt(choice_);
             switch (choice) {
                 case 1: optBookSearch(); break;
                 case 2: optPlaceOrder(); break;
@@ -28,12 +35,6 @@ public class CustomerCLI implements CLIInterface {
     }
 
     private void printMenu() {
-        System.out.println("---------Book List----------");
-        try{
-            db.listAllBooks();
-        }catch(Exception e){
-            System.out.println("[Error]"+e.getMessage());
-        }
         System.out.println("-----Customer Operation-----");
         System.out.println(">1. Book Search");
         System.out.println(">2. Place Order");
@@ -45,8 +46,13 @@ public class CustomerCLI implements CLIInterface {
     private void optBookSearch() {
         while(true){
         printSubMenu1();
-        int choice = sc.nextInt();
-        System.out.println();
+        String choice_ = sc.next();
+            if(!verifyInput.isPositiveInteger(choice_)){
+                System.out.println("[Error] Invalid operation, choose again.\n");
+                continue;
+            }
+            System.out.println();
+            int choice = Integer.parseInt(choice_);
             switch (choice) {
                 case 1: optSearchByISBN(); break;
                 case 2: optSearchByTitle(); break;

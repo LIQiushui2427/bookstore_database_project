@@ -3,7 +3,7 @@ package models;
 import java.sql.*;
 import java.io.*;
 import java.util.*;
-
+import models.utils.verifyInput;
 import models.file.*;
 
 public class Database {
@@ -15,6 +15,7 @@ public class Database {
 
     private Connection conn = null;
     private Random random = new Random();
+    private verifyInput verify = new verifyInput();
 
     public void connect() throws ClassNotFoundException, SQLException {
         Class.forName("com.mysql.cj.jdbc.Driver");
@@ -125,8 +126,6 @@ public class Database {
 
         int orderId_num = random.nextInt(100000000);
         String orderID = String.format("%08d", orderId_num);
-        ArrayList<String> ISBNList=new ArrayList<String>();
-        ArrayList<Integer> item_quantity=new ArrayList<Integer>();
 
         System.out.println("Order placed successfully, your order ID is: " + orderID);
 
@@ -134,36 +133,44 @@ public class Database {
 
 
         while(true){
-            System.out.printf("Enter The Book ISBN You Like Order. Tpye '0' to finish: ");
+            System.out.printf("Enter The Book ISBN You Like Order. Type '0' to finish: ");
             String isbn = sc.next();
             if(isbn.equals("0")){
                 break;
             }
-            System.out.printf("Enter The Quantity You Like Order. Tpye '0' to finish: ");
-            int quantity = sc.nextInt();
-            if(quantity==0){
+            if(!verifyInput.isISBN(isbn)){
+                System.out.println("Invalid ISBN, order failed.");
                 break;
             }
+            System.out.println("Got it, the book is:");
+            printBookByISBN(isbn);
+            System.out.printf("Enter The Quantity You Like Order. Tpye '0' to finish: ");
+            String _quantity = sc.next();
+            if(!verifyInput.isPositiveInteger(_quantity)){
+                System.out.println("Invalid input, order failed.");
+                break;
+            }
+            int quantity = Integer.parseInt(_quantity);
             if(placeOrderUtil(userID, orderID, isbn, quantity, timestamp)==1){
                 break;
             }
-            ISBNList.add(isbn);
-            item_quantity.add(quantity);
         }
         
-        System.out.println("-----------------------");
+        System.out.println("---------------------------");
     }
 
     public int placeOrderUtil(String userID, String orderID, String isbn, int quantity, Timestamp timestamp){
         try (PreparedStatement stmt1 = conn.prepareStatement("SELECT inventory_quantity FROM book WHERE isbn = ?");
              PreparedStatement _stmt2 =  conn.prepareStatement("SELECT COUNT(*) FROM `order` WHERE isbn = CAST(? AS CHAR(20)) AND oid = CAST(? AS CHAR(20))");
-             PreparedStatement stmt2 = conn.prepareStatement("INSERT INTO `order` VALUES (?, ?, ?, ?)");
+             PreparedStatement stmt2 = conn.prepareStatement("INSERT INTO `order`(oid, uid, item_quantity, isbn) VALUES (?, ?, ?, ?)");
              PreparedStatement stmt2_ = conn.prepareStatement("UPDATE `order` SET item_quantity = item_quantity + ? WHERE oid = ? AND isbn = ?");
              PreparedStatement stmt3 = conn.prepareStatement("SELECT * FROM order_details WHERE oid = ?");
              PreparedStatement stmt4 = conn.prepareStatement("UPDATE order_details SET order_quantity = order_quantity + ? WHERE oid = ?");
              PreparedStatement stmt5 = conn.prepareStatement("INSERT INTO order_details VALUES (?, ?, ?, ?)");
              PreparedStatement stmt6 = conn.prepareStatement("UPDATE book SET inventory_quantity = inventory_quantity - ? WHERE isbn = ?");
              PreparedStatement stmt7 = conn.prepareStatement("INSERT INTO buy (uid, isbn, item_quantity) VALUES (?, ?, ?)");
+             PreparedStatement stmt8 = conn.prepareStatement("SELECT * FROM buy WHERE uid = ?");
+             PreparedStatement stmt9 = conn.prepareStatement("UPDATE buy SET item_quantity = item_quantity + ? WHERE uid = ? AND isbn = ?");
              ) {
             
             stmt1.setString(1, isbn);
@@ -189,9 +196,9 @@ public class Database {
             if(rs.getInt(1)==0){
                 System.out.println("Order is not in order table, inserting it...");
                 stmt2.setString(1, orderID);
-                stmt2.setString(2, isbn);
+                stmt2.setString(2, userID);
                 stmt2.setInt(3, quantity);
-                stmt2.setTimestamp(4, timestamp);
+                stmt2.setString(4, isbn);
                 stmt2.executeUpdate();
                 System.out.println("Order table inserted successfully.");
             }
@@ -238,7 +245,7 @@ public class Database {
             //insert or update buy table
             System.out.println("Updating buy table...");
             //check if order is in buy table
-            PreparedStatement stmt8 = conn.prepareStatement("SELECT * FROM buy WHERE uid = ?");
+            
             stmt8.setString(1, userID);
             ResultSet rs3 = stmt8.executeQuery();
             //search for isbn inside buy
@@ -254,7 +261,6 @@ public class Database {
             while(rs3.next()){
                 if(rs3.getString("isbn").equals(isbn)){
                     System.out.println("Order is in buy table, updating it...");
-                    PreparedStatement stmt9 = conn.prepareStatement("UPDATE buy SET item_quantity = item_quantity + ? WHERE uid = ? AND isbn = ?");
                     stmt9.setInt(1, quantity);
                     stmt9.setString(2, userID);
                     stmt9.setString(3, isbn);
@@ -373,9 +379,7 @@ public class Database {
             num.next();
             int count = num.getInt(1);
             if(count==0) {
-                System.out.println("|                             |");
-                System.out.println("     No book record found.");
-                System.out.println("|                             |");
+                System.out.println("Search uitl: No book record found.");
                 return;
             }
 
