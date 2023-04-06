@@ -68,24 +68,30 @@ public class CustomerCLI implements CLIInterface {
         System.out.println("-----Create Account-----");
         System.out.printf("Enter the User ID: ");
         String userID = sc.next();
-        while(db.verifyUser(userID) == true){
-            System.out.println("[Error] Sorry the ID has already been occupied. Use a different name and try again.");
-            System.out.println("Return? Enter Y/y to return, enter other to continue registeration.");
-            String choice = sc.next();
-            if(choice.equals("y")||choice.equals("Y")){
-                return;
-            }
-            else{
-                System.out.printf("Enter the User ID: ");
-                userID = sc.next();
-            }
+        if(!verifyInput.isValidUid(userID)){
+            System.out.println("[Error] Invalid uid, return to the customer operation menu.");
+            return;
+        }
+        if(db.verifyUser(userID) == true){
+            System.out.println("[Error] uid already exists, return to the customer operation menu.");
+            return;
         }
         System.out.printf("Enter the User Name: ");
         String userName = sc.next();
-        System.out.printf("Enter the User Address: ");
+        if(!verifyInput.isValidName(userName)){
+            System.out.println("[Error] Invalid name, return to the customer operation menu.");
+            return;
+        }
+        System.out.println("Enter the User Address: (Address: non-empty string of maximum 200 characters. The components of the address are delimited by (,). There is no % or _ character.)");
         String userAddress = sc.next();
+        if(!verifyInput.isValidAddress(userAddress)){
+            System.out.println("[Error] Invalid address, return to the customer operation menu.");
+            return;
+        }
+        System.out.println("Account created successfully: " + userID + " " + userName + " " + userAddress);
         db.createUser(userID, userName, userAddress);
     }
+
     private void printSubMenu1() {
         System.out.println("-----Choose the Grouped Order-----");
         System.out.println(">1. Search by ISBN");
@@ -107,7 +113,7 @@ public class CustomerCLI implements CLIInterface {
     }
 
     private void optCheckHistoryOrders(){
-        System.out.printf("Enter The User ID: ");
+        System.out.printf("Enter your User ID: ");
         String userID = sc.next();
         if(db.verifyUser(userID) == false){
             System.out.println("[Error] login failed, return to the customer operation menu.");
